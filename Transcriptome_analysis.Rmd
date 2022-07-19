@@ -1,0 +1,1608 @@
+---
+title: "Muga_transcriptome"
+author: "Rajal Debnath"
+date: "11/05/2022"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Differential gene expression in wild type muga silkworm infected with pathogenic bacterial strain Aeromonas cavaie
+
+Illumina paired end sequencing approach was adopted to generate reads from the libraries of size (**). A total of** \_\_ reads were obtained from 24 fastq datasets.
+
+### Loading libraries
+
+```{r loading required libraries, message=FALSE, tidy=TRUE, echo = FALSE}
+library(tidyverse)
+library(vegan)
+library(DESeq2)
+library(edgeR)
+library(Rsubread)
+library(DESeq2)
+library(here)
+library(reshape2)
+library(knitr)
+library(stringr)
+library(kableExtra)
+library(ggsci)
+library(EnhancedVolcano)
+library(gplots)
+library(GGally)
+library(cowplot)
+```
+
+#### Sample metadata
+
+```{r}
+list.files()
+```
+
+```{r}
+sample_metadata <- read_table(here("sample_metadata_transcriptomics.txt"))
+```
+
+
+The sample metadata information table is provided below:
+
+|**Sample_ID**|**Tissue** |**Condition** | **Pathogen** |
+:-------------:-----------:--------------:--------------:
+|C1-FB-1.bam  | FatBody | control | noinfection. |
+|C1-FB-2.bam  | FatBody | control | nosema. | 
+|C1-FB-3.bam | FatBody \| control \| noinfection. | \|C1-MG-1.bam \| MidGut \| control \| noinfection. \| \|C1-MG-2.bam \| MidGut \| control \| noinfection. \| \|C1-MG-3.bam \| MidGut \| control \| nosema. \| \|C1-Hemocytes-1.bam \| Hemocytes \| control \| noinfection. \| \|C1-Hemocytes-2.bam \| Hemocytes \| control \| noinfection. \| \|C1-Hemocytes-3.bam \| Hemocytes \| control \| noinfection. \| \|I1-FB-1.bam \| FatBody \| Infected \| aeromonas. \| \|I1-FB-2.bam \| FatBody \| Infected \| nosema_aeromonas\| \|I1-FB-3.bam \| FatBody \| Infected \| nosema_aeromonas\| \|I1-Hemocytes-1.bam \| Hemocytes \| Infected \| aeromonas. \| \|I1-Hemocytes-2.bam \| Hemocytes \| Infected \| aeromonas. \| \|I1-Hemocytes-3.bam \| Hemocytes \| Infected \| aeromonas. \| \|I1-MG-1.bam \| MidGut \| Infected \| nosema_aeromonas\| \|I1-MG-2.bam \| MidGut \| Infected \| nosema_aeromonas\|
+
+We have the genome (.fa), annotation (.gff3) and counts file (.txt) from hisat2 alignment bamfile (.bam) with us
+
+Lets first convert the gff3 format file to gtf format file. We would requere gffread utility for this: -
+
+```{bash eval = FALSE}
+gffread WT.gff3 -T -o WT_annotation.gtf
+```
+
+```{bash eval = FALSE}
+hisat2_extract_splice_sites.py WT.gtf > splicesites.tsv
+```
+
+```{bash eval = FALSE}
+hisat2_extract_exons.py WT.gtf > exons.tsv
+```
+
+```{bash eval = FALSE}
+hisat2-build --ss splicesites.tsv --exon exons.tsv WT_genome.fasta WT-genome
+```
+
+    Settings:
+      Output files: "WT_genome.*.ht2"
+      Line rate: 7 (line is 128 bytes)
+      Lines per side: 1 (side is 128 bytes)
+      Offset rate: 4 (one in 16)
+      FTable chars: 10
+      Strings: unpacked
+      Local offset rate: 3 (one in 8)
+      Local fTable chars: 6
+      Local sequence length: 57344
+      Local sequence overlap between two consecutive indexes: 1024
+      Endianness: little
+      Actual local endianness: little
+      Sanity checking: disabled
+      Assertions: disabled
+      Random seed: 0
+      Sizeofs: void*:8, int:4, long:8, size_t:8
+    Input files DNA, FASTA:
+      WT_genome.fasta
+    Reading reference sizes
+      Time reading reference sizes: 00:01:21
+    Calculating joined length
+    Writing header
+    Reserving space for joined string
+    Joining reference sequences
+      Time to join reference sequences: 00:00:03
+      Time to read SNPs and splice sites: 00:00:04
+    Generation 0 (497083690 -> 497083690 nodes, 0 ranks)
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    Generation 1 (497176130 -> 497176130 nodes, 0 ranks)
+    COUNTED NEW NODES: 0
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 3
+    RESIZED NODES: 0
+    MADE NEW NODES: 1
+    Generation 2 (497361016 -> 497361016 nodes, 0 ranks)
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    Generation 3 (497731021 -> 497731021 nodes, 0 ranks)
+    BUILT FROM_INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    RESIZE NODES: 7
+    SORT NODES: 37
+    MERGE, UPDATE RANK: 7
+    Generation 4 (498472841 -> 498083044 nodes, 299739128 ranks)
+    ALLOCATE FROM_TABLE: 2
+    BUILD TABLE: 26
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 6
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 18
+    MERGEUPDATERANK: 6
+    TOTAL TIME: 59
+    Generation 5 (498280944 -> 498069994 nodes, 443062907 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 3
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 7
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 38
+    Generation 6 (498120340 -> 498107254 nodes, 465387684 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 26
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 2
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 5
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 36
+    Generation 7 (498170549 -> 498157149 nodes, 478078251 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 2
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 4
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 34
+    Generation 8 (498232809 -> 498215831 nodes, 486479864 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 4
+    MERGEUPDATERANK: 1
+    TOTAL TIME: 32
+    Generation 9 (498303478 -> 498280463 nodes, 492404188 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 26
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 32
+    Generation 10 (498383065 -> 498347693 nodes, 495403294 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 26
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 0
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 31
+    Generation 11 (498450606 -> 498410714 nodes, 496880012 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 2
+    MERGEUPDATERANK: 1
+    TOTAL TIME: 32
+    Generation 12 (498512749 -> 498475169 nodes, 497732138 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 26
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 1
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 33
+    Generation 13 (498535770 -> 498497314 nodes, 498265515 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 2
+    RESIZED NODES: 0
+    MADE NEW NODES: 1
+    MERGEUPDATERANK: 2
+    TOTAL TIME: 32
+    Generation 14 (498523456 -> 498504902 nodes, 498495568 ranks)
+    ALLOCATE FROM_TABLE: 0
+    BUILD TABLE: 25
+    BUILD INDEX: 1
+    COUNTED NEW NODES: 1
+    COUNTED TEMP NODES: 0
+    RESIZED NODES: 0
+    RESIZED NODES: 0
+    MADE NEW NODES: 1
+    MERGEUPDATERANK: 1
+    TOTAL TIME: 29
+    Generation 15 (498504902 -> 498504902 nodes, 498504902 ranks)
+    Generating edges... 
+    NODE.TO -> GENOME POS: 1
+    BUILD FROM_INDEX 1
+    COUNTED NEW EDGES: 4
+    MADE NEW EDGES: 7
+    SORTED NEW EDGES: 22
+    RE-SORTED NODES: 32
+    PROCESS EDGES: 2
+    REMOVE Y: 0
+    SORT, Make index: 21
+    TOTAL: 90
+    Allocating ftab, absorbFtab
+    Entering GFM loop
+    Exited GFM loop
+    fchr[A]: 0
+    fchr[C]: 164471274
+    fchr[G]: 249273728
+    fchr[T]: 334108648
+    fchr[$]: 498597781
+    Exiting GFM::buildToDisk()
+    Returning from initFromVector
+    Wrote 311155590 bytes to primary GFM file: WT_genome.1.ht2
+    Wrote 124626232 bytes to secondary GFM file: WT_genome.2.ht2
+    Re-opening _in1 and _in2 as input streams
+    Returning from GFM constructor
+    Warning: a local graph exploded (offset: 270555494, length: 57344)
+    Returning from initFromVector
+    Wrote 332956615 bytes to primary GFM file: WT_genome.5.ht2
+    Wrote 126411074 bytes to secondary GFM file: WT_genome.6.ht2
+    Re-opening _in5 and _in5 as input streams
+    Returning from HGFM constructor
+    Headers:
+        len: 496990887
+        gbwtLen: 498597782
+        nodes: 498504901
+        sz: 248495444
+        gbwtSz: 249298892
+        lineRate: 7
+        offRate: 4
+        offMask: 0xfffffff0
+        ftabChars: 10
+        eftabLen: 0
+        eftabSz: 0
+        ftabLen: 1048577
+        ftabSz: 4194308
+        offsLen: 31156557
+        offsSz: 124626228
+        lineSz: 128
+        sideSz: 128
+        sideGbwtSz: 104
+        sideGbwtLen: 208
+        numSides: 2397105
+        numLines: 2397105
+        gbwtTotLen: 306829440
+        gbwtTotSz: 306829440
+        reverse: 0
+        linearFM: No
+    Total time for call to driver() for forward index: 00:24:04
+
+```{bash eval = FALSE}
+hisat2 -p 4 --dta -x WT-genome -1 $i -2 $j -S $i.sam
+```
+
+```{r}
+setwd("/media/muga/muga/Data_backup_form_new_drive/Transcriptome_Raw_data/trimmed_files/")
+bamfiles <- list.files("bam_files_wt1", pattern = "bam.bam$")
+```
+
+```{r}
+muga_wt_transcript_matrix <- featureCounts(files=bamfiles, annot.ext = "WT_annotation.gtf",
+                                           isGTFAnnotationFile = TRUE,
+                                           isPairedEnd=TRUE,
+                                           countReadPairs = TRUE,
+                                           requireBothEndsMapped=TRUE, 
+                                           countChimericFragments=TRUE,
+                                           nthreads = 8)
+```
+
+            ==========     _____ _    _ ____  _____  ______          _____  
+            =====         / ____| |  | |  _ \|  __ \|  ____|   /\   |  __ \ 
+              =====      | (___ | |  | | |_) | |__) | |__     /  \  | |  | |
+                ====      \___ \| |  | |  _ <|  _  /|  __|   / /\ \ | |  | |
+                  ====    ____) | |__| | |_) | | \ \| |____ / ____ \| |__| |
+            ==========   |_____/ \____/|____/|_|  \_\______/_/    \_\_____/
+           Rsubread 2.10.0
+
+    //========================== featureCounts setting ===========================\\
+    ||                                                                            ||
+    ||             Input files : 24 BAM files                                     ||
+    ||                                                                            ||
+    ||                           ASG-5d-1.bam.bam                                 ||
+    ||                           ASG-5d-2.bam.bam                                 ||
+    ||                           C1-FB-1.bam.bam                                  ||
+    ||                           C1-FB-2.bam.bam                                  ||
+    ||                           C1-FB-3.bam.bam                                  ||
+    ||                           C1-Hemocytes-1.bam.bam                           ||
+    ||                           C1-Hemocytes-2.bam.bam                           ||
+    ||                           C1-Hemocytes-3.bam.bam                           ||
+    ||                           C1-MG-1.bam.bam                                  ||
+    ||                           C1-MG-2.bam.bam                                  ||
+    ||                           C1-MG-3.bam.bam                                  ||
+    ||                           I1-FB-1.bam.bam                                  ||
+    ||                           I1-FB-2.bam.bam                                  ||
+    ||                           I1-FB-3.bam.bam                                  ||
+    ||                           I1-Hemocytes-1.bam.bam                           ||
+    ||                           I1-Hemocytes-2.bam.bam                           ||
+    ||                           I1-Hemocytes-3.bam.bam                           ||
+    ||                           I1-MG-1.bam.bam                                  ||
+    ||                           I1-MG-2.bam.bam                                  ||
+    ||                           I1-MG-3.bam.bam                                  ||
+    ||                           MSG-1-5d-1.bam.bam                               ||
+    ||                           MSG-5d-2.bam.bam                                 ||
+    ||                           PSG-5d-1.bam.bam                                 ||
+    ||                           PSG-5d-2.bam.bam                                 ||
+    ||                                                                            ||
+    ||              Paired-end : yes                                              ||
+    ||        Count read pairs : yes                                              ||
+    ||              Annotation : WT_annotation.gtf (GTF)                          ||
+    ||      Dir for temp files : .                                                ||
+    ||                 Threads : 8                                                ||
+    ||                   Level : meta-feature level                               ||
+    ||      Multimapping reads : counted                                          ||
+    || Multi-overlapping reads : not counted                                      ||
+    ||   Min overlapping bases : 1                                                ||
+    ||                                                                            ||
+    \\============================================================================//
+
+    //================================= Running ==================================\\
+    ||                                                                            ||
+    || Load annotation file WT_annotation.gtf ...                                 ||
+    ||    Features : 140948                                                       ||
+    ||    Meta-features : 18385                                                   ||
+    ||    Chromosomes/contigs : 1748                                              ||
+    ||                                                                            ||
+    || Process BAM file ASG-5d-1.bam.bam...                                       ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 22098479                                             ||
+    ||    Successfully assigned alignments : 13701472 (62.0%)                     ||
+    ||    Running time : 0.30 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file ASG-5d-2.bam.bam...                                       ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 19078993                                             ||
+    ||    Successfully assigned alignments : 9595387 (50.3%)                      ||
+    ||    Running time : 0.30 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-FB-1.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 32753624                                             ||
+    ||    Successfully assigned alignments : 20956863 (64.0%)                     ||
+    ||    Running time : 1.47 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-FB-2.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 26865971                                             ||
+    ||    Successfully assigned alignments : 16043239 (59.7%)                     ||
+    ||    Running time : 0.39 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-FB-3.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 34383188                                             ||
+    ||    Successfully assigned alignments : 22998350 (66.9%)                     ||
+    ||    Running time : 0.56 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-Hemocytes-1.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 32341455                                             ||
+    ||    Successfully assigned alignments : 19914965 (61.6%)                     ||
+    ||    Running time : 1.13 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-Hemocytes-2.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 31775219                                             ||
+    ||    Successfully assigned alignments : 19702601 (62.0%)                     ||
+    ||    Running time : 0.82 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-Hemocytes-3.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 27754010                                             ||
+    ||    Successfully assigned alignments : 16900208 (60.9%)                     ||
+    ||    Running time : 0.42 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-MG-1.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 26193165                                             ||
+    ||    Successfully assigned alignments : 16697856 (63.7%)                     ||
+    ||    Running time : 0.97 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file C1-MG-2.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 87508238                                             ||
+    ||    Successfully assigned alignments : 16880952 (19.3%)                     ||
+    ||    Running time : 57.19 minutes                                            ||
+    ||                                                                            ||
+    || Process BAM file C1-MG-3.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 35415180                                             ||
+    ||    Successfully assigned alignments : 15683782 (44.3%)                     ||
+    ||    Running time : 2.04 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-FB-1.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 30679640                                             ||
+    ||    Successfully assigned alignments : 17962771 (58.5%)                     ||
+    ||    Running time : 0.60 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-FB-2.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 19642115                                             ||
+    ||    Successfully assigned alignments : 13384879 (68.1%)                     ||
+    ||    Running time : 0.53 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-FB-3.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 25897070                                             ||
+    ||    Successfully assigned alignments : 14717576 (56.8%)                     ||
+    ||    Running time : 0.49 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-Hemocytes-1.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 27851374                                             ||
+    ||    Successfully assigned alignments : 16436031 (59.0%)                     ||
+    ||    Running time : 0.67 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-Hemocytes-2.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 26665187                                             ||
+    ||    Successfully assigned alignments : 16683832 (62.6%)                     ||
+    ||    Running time : 0.66 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-Hemocytes-3.bam.bam...                                 ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 24420223                                             ||
+    ||    Successfully assigned alignments : 15359706 (62.9%)                     ||
+    ||    Running time : 2.20 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-MG-1.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 31307054                                             ||
+    ||    Successfully assigned alignments : 18346948 (58.6%)                     ||
+    ||    Running time : 2.10 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-MG-2.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 26785920                                             ||
+    ||    Successfully assigned alignments : 13693112 (51.1%)                     ||
+    ||    Running time : 1.26 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file I1-MG-3.bam.bam...                                        ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 28851779                                             ||
+    ||    Successfully assigned alignments : 17109105 (59.3%)                     ||
+    ||    Running time : 0.40 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file MSG-1-5d-1.bam.bam...                                     ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 42023845                                             ||
+    ||    Successfully assigned alignments : 27726330 (66.0%)                     ||
+    ||    Running time : 1.88 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file MSG-5d-2.bam.bam...                                       ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 23314595                                             ||
+    ||    Successfully assigned alignments : 12111635 (51.9%)                     ||
+    ||    Running time : 0.38 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file PSG-5d-1.bam.bam...                                       ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 44010192                                             ||
+    ||    Successfully assigned alignments : 28373110 (64.5%)                     ||
+    ||    Running time : 2.57 minutes                                             ||
+    ||                                                                            ||
+    || Process BAM file PSG-5d-2.bam.bam...                                       ||
+    ||    Paired-end reads are included.                                          ||
+    ||    Total alignments : 40663670                                             ||
+    ||    Successfully assigned alignments : 21685214 (53.3%)                     ||
+    ||    Running time : 1.95 minutes                                             ||
+    ||                                                                            ||
+    || Write the final count table.                                               ||
+    || Write the read assignment summary.                                         ||
+    ||                                                                            ||
+    \\============================================================================//
+
+```{r}
+counts_file <- muga_wt_transcript_matrix$counts
+```
+
+```{r we will remove the .bam.bam in the file name and also the truncate the gene names}
+colnames(counts_file) <- gsub(".bam.bam", "", colnames(counts_file))
+head(counts_file)[1:6,1:6]
+rownames(counts_file) <- gsub("-v1.0.a1", "", rownames(counts_file))
+rownames(counts_file) <- gsub(".00g", ".g", rownames(counts_file))
+tail(counts_file)[1:6,1:6]
+```
+
+```{r}
+head(counts_file)[1:6,1:6]
+colSums(counts_file)
+```
+
+```{r}
+par(mar=c(8,4,4,1)+0.1)
+barplot(colSums(counts_file)/1e6, las=3)  ### here we see that there is variation in the reads count for each sample, some samples have a total of more than 25 million reads, PSG-5d-1, whereas some has below 10 million like ASG-5d-1
+```
+
+```{r}
+hist(counts_file[,1], br=100)
+```
+
+```{r Lets convert the count file to log transformation and replot the histogram}
+logcounts_file <- log2(1+counts_file)
+hist(logcounts_file[,1], br=100)
+```
+
+```{r Lets see how the transcriptome profile between samples look like, if two samples are identical the scatter plot should provide a straight line at 45 degree, the degree of seperation of points from this diagonal line indicates the difference between the transcriptome profile of the two samples}
+
+colnames(logcounts_file)
+ggplot(data.frame(logcounts_file), aes(x = logcounts_file[,1], y = logcounts_file[,1])) +
+  geom_point(size = 1, col = "black", alpha = 0.25) +
+  theme_classic(base_size = 15) +
+  xlab("log2 ASG-5d-1") +
+  ylab("log2  ASG-5d-1")
+
+### If two samples are biological replicates than they should be highly similar in transcriptome profile but stillnot identical
+
+ggplot(data.frame(logcounts_file), aes(x = logcounts_file[,1], y = logcounts_file[,2])) +
+  geom_point(size = 1, col = "black", alpha = 0.25) +
+  theme_classic(base_size = 15) +
+  xlab("log2 ASG-5d-1") +
+  ylab("log2 ASG-5d-2")
+
+### say we want to see how similar our samples from hemocytes were
+ggplot(data.frame(logcounts_file), aes(x = logcounts_file[,6], y = logcounts_file[,7])) +
+  geom_point(size = 1, col = "black", alpha = 0.25) +
+  theme_classic(base_size = 15) +
+  xlab("log2 C1-Hemocytes-1") +
+  ylab("log2 C1-Hemocytes-2") ## as seen in the plot hemocytes samples are more similar to each other than any other sample, similar clustering we can see in our pca plot
+
+ggplot(data.frame(logcounts_file), aes(x = logcounts_file[,6], y = logcounts_file[,15])) +
+  geom_point(size = 1, col = "black", alpha = 0.25) +
+  theme_classic(base_size = 15) +
+  xlab("log2 C1-Hemocytes-1") +
+  ylab("log2 I1-Hemocytes-1") ## transcriptome profile of hemocytes sample from control vs infected
+```
+
+
+```{r similar to above we will rename our sample ids in the metadata file}
+sample_metadata <- read_table(here("sample_metadata_transcriptomics.txt"))
+sample_metadata$Sample_ID <- gsub(".bam", "", sample_metadata$Sample_ID)
+tail(sample_metadata)
+```
+
+```{r for downstream analysis the order of the samples in the counts file should be same with the order in the colData}
+counts_file <- counts_file[,sample_metadata$Sample_ID]
+```
+
+#### Sample to sample transcriptome profile similarities using PCA 
+
+```{r fig.height=5.5, fig.width=5.5}
+muga_dds <- DESeqDataSetFromMatrix(countData = counts_file,
+                                             colData = sample_metadata,
+                                             design = ~ Tissue+Condition+Tissue*Condition)
+transformed_dds <- rlog(muga_dds, blind = TRUE, fitType = "parametric")
+
+pca1 <- DESeq2::plotPCA(transformed_dds, intgroup = "Condition") +
+  geom_point(pch=21, color = "black", size = 3.5, alpha=1) +
+  scale_fill_npg() +
+  theme_classic(base_size = 15)+
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(), 
+        legend.text= element_text(size = 8, face = "bold"))
+
+pca2 <- DESeq2::plotPCA(transformed_dds, intgroup = "Tissue") +
+  geom_point(pch=21, color = "black", size = 3.5, alpha=1) +
+  scale_fill_npg() +
+  theme_classic(base_size = 15)+
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(), 
+        legend.text= element_text(size = 8, face = "bold")) +
+  stat_ellipse()
+
+pca3 <- DESeq2::plotPCA(transformed_dds, intgroup = c("Condition", "Tissue")) +
+  geom_point(pch=21, color = "black", size = 3.5, alpha=1) +
+  scale_fill_npg() +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(), 
+        legend.text= element_text(size = 8, face = "bold"))
+
+muga_dds_pathogen <- DESeqDataSetFromMatrix(countData = counts_file,
+                                            colData = sample_metadata,
+                                            design = ~ Pathogen)
+muga_dds_pathogen <- DESeq(muga_dds_pathogen)
+nrow(muga_dds_pathogen)
+
+keep <- rowSums(counts(muga_dds_pathogen)) > 5
+muga_dds <- muga_dds_pathogen[keep,]
+nrow(muga_dds_pathogen)
+
+transformed_dds_pathogen <- rlog(muga_dds_pathogen, blind = TRUE, fitType = "parametric")
+
+pca4 <- DESeq2::plotPCA(transformed_dds_pathogen, intgroup = "Pathogen") +
+  geom_point(pch=21, color = "black", size = 3.5, alpha=1) +
+  scale_fill_npg() +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(), 
+        legend.text= element_text(size = 8, face = "bold")) +
+  guides(color=guide_legend(ncol = 2))
+        
+  
+pca4
+
+library(cowplot)
+plot_grid(pca1, pca2, pca3, pca4, labels = c("A", "B", "C", "D"))
+#ggsave("DESeq2_PCAplots.pdf", width = 8, height = 8)
+
+```
+
+#### Heatmap of all samples
+
+```{r}
+detectGroups <- function (x){  # x are col names
+  tem <- gsub("[0-9]*$","",x) # Remove all numbers from end
+  #tem = gsub("_Rep|_rep|_REP","",tem)
+  tem <- gsub("-$","",tem); # remove "_" from end
+  tem <- gsub("_Rep$","",tem); # remove "_Rep" from end
+  tem <- gsub("_rep$","",tem); # remove "_rep" from end
+  tem <- gsub("_REP$","",tem)  # remove "_REP" from end
+  return( tem )
+}
+```
+
+```{r}
+dist2 <- function(x, ...)   # distance function = 1-PCC (Pearson's correlation coefficient)
+  as.dist(1-cor(t(x), method="pearson"))
+```
+
+```{r fig.height=4.5, fig.width=3}
+library(gplots)
+
+hclust2 <- function(x, method="average", ...)  # average linkage in hierarchical clustering
+  hclust(x, method=method, ...)
+
+n=500 # number of top genes by standard deviation
+
+x = assay(transformed_dds)
+if(n>dim(x)[1]) n = dim(x)[1] # max	as data
+
+x = x[order(apply(x,1,sd),decreasing=TRUE),]  # sort genes by standard deviation
+
+x = x[1:n,]   # only keep the n genes
+
+# this will cutoff very large values, which could skew the color 
+x=as.matrix(x[1:n,])-apply(x[1:n,],1,mean)
+cutoff = median(unlist(x)) + 4*sd (unlist(x)) 
+x[x>cutoff] <- cutoff
+cutoff = median(unlist(x)) - 4*sd (unlist(x)) 
+x[x< cutoff] <- cutoff
+
+	
+groups = detectGroups(colnames(x))
+groups.colors = rainbow(length(unique(groups)))
+
+par(mar=c(1,1,1,1))
+	
+lmat = rbind(c(5,4),c(0,1), c(3,2))
+lwid = c(1,3)
+lhei = c(1,0.1,4)
+
+
+heatmap.2(x, distfun = dist2,
+          hclustfun=hclust2,
+          col=greenred(75), density.info="none", trace="none", scale="row", keysize=.5,
+          key=TRUE,
+          ColSideColors=groups.colors[as.factor(groups)],
+          margins=c(5.5,8),
+          cexRow=1/log10(nrow(x)),
+          offsetRow = 0.1,
+          srtCol=45,
+          cexCol=1,
+          key.par = list(mar=c(5,1,5,2)),
+          lmat = lmat, lwid = lwid, lhei = lhei)
+
+```
+
+
+## Differential expression analysis
+
+```{r}
+muga_dds <- DESeqDataSetFromMatrix(countData = counts_file,
+                                             colData = sample_metadata,
+                                             design = ~ Tissue)
+muga_dds$Tissue <- relevel(muga_dds$Tissue, "Ant-SilkGland")
+muga_dds <- DESeq(muga_dds, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds)) > 5
+muga_dds <- muga_dds[keep,]
+
+resultsNames(muga_dds)
+Tissue_Mid.SilkGland_vs_Ant.SilkGland <- results(muga_dds,
+                              name = "Tissue_Mid.SilkGland_vs_Ant.SilkGland",
+                              lfcThreshold = 1,
+                              alpha = 0.05)
+
+Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano <- as.data.frame(Tissue_Mid.SilkGland_vs_Ant.SilkGland)
+Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano <- mutate(Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano,
+                                   sig = ifelse(Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano[which(abs(Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano[which(Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table, aes(y = reorder(rownames(significant_table), log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", 
+                  color = "black", 
+                  fill = ifelse(significant_table$log2FoldChange > 0, "brown", "darkgreen"), 
+                  alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+               axis.text.y = element_text(color = "black"), 
+               legend.text = element_text(size = 3.5), 
+               legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Mid.SilkGland_vs_Ant.SilkGland")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "Tissue_Mid.SilkGland_vs_Ant.SilkGland.txt", sep = "\t", quote = FALSE)
+
+################################################################################################################
+Tissue_Post.SilkGland_vs_Ant.SilkGland <- results(muga_dds,
+                              name = "Tissue_Post.SilkGland_vs_Ant.SilkGland",
+                              lfcThreshold = 1,
+                              alpha = 0.05)
+
+topGenesPostvsAnt <- as.data.frame(Tissue_Post.SilkGland_vs_Ant.SilkGland) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(150)
+
+Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano <- as.data.frame(Tissue_Post.SilkGland_vs_Ant.SilkGland)
+Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano <- mutate(Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano,
+                                   sig = ifelse(Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano[which(abs(Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano[which(Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(topGenesPostvsAnt, aes(y = reorder(GeneID, log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", 
+                  color = "black", 
+                  fill = ifelse(topGenesPostvsAnt$log2FoldChange > 0, "brown", "darkgreen"), 
+                  alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+               axis.text.y = element_text(color = "black"), 
+               legend.text = element_text(size = 3.5), 
+               legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Post.SilkGland_vs_Ant.SilkGland")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "Tissue_Post.SilkGland_vs_Ant.SilkGland.txt", sep = "\t", quote = FALSE)
+
+
+###############################################################################################################
+muga_dds$Tissue <- relevel(muga_dds$Tissue, "Mid-SilkGland")
+muga_dds <- DESeq(muga_dds, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds)) > 5
+muga_dds <- muga_dds[keep,]
+
+resultsNames(muga_dds)
+
+Tissue_Post.SilkGland_vs_Mid.SilkGland <- results(muga_dds,
+                              name =  "Tissue_Post.SilkGland_vs_Mid.SilkGland",
+                              lfcThreshold = 1,
+                              alpha = 0.05)
+
+Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano <- as.data.frame(Tissue_Post.SilkGland_vs_Mid.SilkGland)
+Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano <- mutate(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano,
+                                   sig = ifelse(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano[which(abs(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano[which(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table, aes(y = reorder(rownames(significant_table), log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", 
+                  color = "black", 
+                  fill = ifelse(significant_table$log2FoldChange > 0, "brown", "darkgreen"), 
+                  alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+               axis.text.y = element_text(color = "black"), 
+               legend.text = element_text(size = 3.5), 
+               legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Post.SilkGland_vs_Mid.SilkGland")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "Tissue_Post.SilkGland_vs_Mid.SilkGland.txt", sep = "\t", quote = FALSE)
+```
+
+```{r}
+Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano <- EnhancedVolcano(Tissue_Post.SilkGland_vs_Mid.SilkGland, 
+                                                                  lab = rownames(Tissue_Post.SilkGland_vs_Mid.SilkGland),
+                                                                  x = "log2FoldChange",
+                                                                  y = "padj",
+                                                                  pCutoff = 0.05,
+                                                                  FCcutoff = 1,
+                                                                  subtitle = "PosteriorSG vs MiddleSG",
+                                                                  title = "",
+                                                                  axisLabSize = 14,
+                                                                  labSize = 1.5,
+                                                                  caption = "",
+                                                                  cutoffLineCol = "blue",
+                                                                  col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                  colAlpha = 0.9,
+                                                                  legendPosition = "",
+                                                                  legendLabSize = 10,
+                                                                  legendIconSize = 4,
+                                                                  pointSize = 1.5,
+                                                                  drawConnectors = TRUE)
+
+Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano <- EnhancedVolcano(Tissue_Post.SilkGland_vs_Ant.SilkGland, 
+                                                                  lab = rownames(Tissue_Post.SilkGland_vs_Ant.SilkGland),
+                                                                  x = "log2FoldChange",
+                                                                  y = "padj",
+                                                                  pCutoff = 0.05,
+                                                                  FCcutoff = 1,
+                                                                  subtitle = "PosteriorSG vs Anterior SG",
+                                                                  title = "",
+                                                                  axisLabSize = 14,
+                                                                  labSize = 1.5,
+                                                                  caption = "",
+                                                                  cutoffLineCol = "blue",
+                                                                  col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                  colAlpha = 0.9,
+                                                                  legendPosition = "",
+                                                                  legendLabSize = 10,
+                                                                  legendIconSize = 4,
+                                                                  pointSize = 1.5,
+                                                                  drawConnectors = TRUE)
+
+Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano <- EnhancedVolcano(Tissue_Mid.SilkGland_vs_Ant.SilkGland,
+                                                                 lab = rownames(Tissue_Mid.SilkGland_vs_Ant.SilkGland),
+                                                                 x = "log2FoldChange",
+                                                                 y = "padj",
+                                                                 pCutoff = 0.05,
+                                                                 FCcutoff = 1,
+                                                                 subtitle = "MiddleSG vs AnteriorSG",
+                                                                 title = "",
+                                                                 axisLabSize = 14,
+                                                                 labSize = 1.5,
+                                                                 caption = "",
+                                                                 cutoffLineCol = "blue",
+                                                                 col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                 colAlpha = 0.9,
+                                                                 legendPosition = "",
+                                                                 legendLabSize = 10,
+                                                                 legendIconSize = 4,
+                                                                 pointSize = 1.5,
+                                                                 drawConnectors = TRUE)
+
+plot_grid(Tissue_Post.SilkGland_vs_Mid.SilkGland_volcano, Tissue_Post.SilkGland_vs_Ant.SilkGland_volcano, Tissue_Mid.SilkGland_vs_Ant.SilkGland_volcano, labels = c("A", "B", "C"), nrow = 3, ncol = 1)
+```
+
+```{r}
+library(ggpubr)
+maplot_Tissue_Mid.SilkGland_vs_Ant.SilkGland <- ggmaplot(Tissue_Mid.SilkGland_vs_Ant.SilkGland, main = expression("Silkgland Middle" %->% "Anterior"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(Tissue_Mid.SilkGland_vs_Ant.SilkGland)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+maplot_Tissue_Post.SilkGland_vs_Ant.SilkGland <- ggmaplot(Tissue_Post.SilkGland_vs_Ant.SilkGland, main = expression("Silkgland Posterior" %->% "Anterior"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(Tissue_Post.SilkGland_vs_Ant.SilkGland)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+maplot_Tissue_Post.SilkGland_vs_Mid.SilkGland <- ggmaplot(Tissue_Post.SilkGland_vs_Mid.SilkGland, main = expression("Silkgland posterior" %->% "Middle"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(Tissue_Post.SilkGland_vs_Mid.SilkGland)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+plot_grid(maplot_Tissue_Mid.SilkGland_vs_Ant.SilkGland, maplot_Tissue_Post.SilkGland_vs_Ant.SilkGland, maplot_Tissue_Post.SilkGland_vs_Mid.SilkGland, labels = c("A", "B", "C"), nrow = 3, ncol = 1)
+```
+
+```{bash}
+sed -i '' 's/\.g/\.00g/g' Tissue_Post.SilkGland_vs_Mid.SilkGland.txt
+sed -i '' 's/\.g/\.00g/g' Tissue_Post.SilkGland_vs_Ant.SilkGland.txt
+sed -i '' 's/\.g/\.00g/g' Tissue_Mid.SilkGland_vs_Ant.SilkGland.txt
+
+awk '{print $1}' Tissue_Post.SilkGland_vs_Mid.SilkGland.txt > Tissue_Post.SilkGland_vs_Mid.SilkGland_geneID.txt
+awk '{print $1}' Tissue_Post.SilkGland_vs_Ant.SilkGland.txt > Tissue_Post.SilkGland_vs_Ant.SilkGland_geneID.txt
+awk '{print $1}' Tissue_Mid.SilkGland_vs_Ant.SilkGland.txt > Tissue_Mid.SilkGland_vs_Ant.SilkGland_geneID.txt
+
+sed -i '' 's/$/-v1.0.a1/g' Tissue_Post.SilkGland_vs_Mid.SilkGland_geneID.txt
+sed -i '' 's/$/-v1.0.a1/g' Tissue_Post.SilkGland_vs_Ant.SilkGland_geneID.txt
+sed -i '' 's/$/-v1.0.a1/g' Tissue_Mid.SilkGland_vs_Ant.SilkGland_geneID.txt
+```
+
+
+```{r}
+##### All samples, tissue type fatbody, hemocytes, midgut (control vs infected) ###
+
+muga_dds <- DESeqDataSetFromMatrix(countData = counts_file,
+                                             colData = sample_metadata,
+                                             design = ~ Tissue)
+
+
+muga_dds$interaction <- factor(paste0(muga_dds$Tissue, muga_dds$Condition))
+muga_dds$interaction
+
+muga_dds$interaction <- relevel(muga_dds$interaction, "FatBodycontrol")
+design(muga_dds) <- ~ interaction
+muga_dds <- DESeq(muga_dds, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds)) > 5
+muga_dds <- muga_dds[keep,]
+
+resultsNames(muga_dds)
+fatbody_inf_vs_ctl <- results(muga_dds,
+                              name = "interaction_FatBodyInfected_vs_FatBodycontrol",
+                              lfcThreshold = 0,
+                              alpha = 0.1)
+
+midgut_inf_vs_ctl <- results(muga_dds,
+                                     contrast = c("interaction", "MidGutInfected", "MidGutcontrol"),
+                                     lfcThreshold = 0.5,
+                                     alpha = 0.1)
+
+hemocytes_inf_vs_ctl <- results(muga_dds,
+                                     contrast = c("interaction", "HemocytesInfected", "Hemocytescontrol"),
+                                     lfcThreshold = 0,
+                                     alpha = 0.1)
+
+####
+fatbody_inf_vs_ctl_volcano <- as.data.frame(fatbody_inf_vs_ctl)
+fatbody_inf_vs_ctl_volcano <- mutate(fatbody_inf_vs_ctl_volcano,
+                                   sig = ifelse(fatbody_inf_vs_ctl_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+fatbody_inf_vs_ctl_volcano[which(abs(fatbody_inf_vs_ctl_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(fatbody_inf_vs_ctl_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- fatbody_inf_vs_ctl_volcano[which(fatbody_inf_vs_ctl_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table, aes(y = reorder(rownames(significant_table), log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", color = "black", fill = ifelse(significant_table$log2FoldChange > 0, "brown", "darkgreen"), alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), axis.text.y = element_text(color = "black"), legend.text = element_text(size = 3.5), legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Fatbody (control vs infected)")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "fatbody_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+####
+
+midgut_inf_vs_ctl_volcano <- as.data.frame(midgut_inf_vs_ctl)
+midgut_inf_vs_ctl_volcano <- mutate(midgut_inf_vs_ctl_volcano,
+                                   sig = ifelse(midgut_inf_vs_ctl_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+midgut_inf_vs_ctl_volcano[which(abs(midgut_inf_vs_ctl_volcano$log2FoldChange)<2.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(midgut_inf_vs_ctl_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- midgut_inf_vs_ctl_volcano[which(midgut_inf_vs_ctl_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table, aes(y = reorder(rownames(significant_table), log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", color = "black", fill = ifelse(significant_table$log2FoldChange > 0, "brown", "darkgreen"), alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), axis.text.y = element_text(color = "black"), legend.text = element_text(size = 3.5), legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Midgut (control vs infected)")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "midgut_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+####
+
+hemocytes_inf_vs_ctl_volcano <- as.data.frame(hemocytes_inf_vs_ctl)
+hemocytes_inf_vs_ctl_volcano <- mutate(hemocytes_inf_vs_ctl_volcano,
+                                   sig = ifelse(hemocytes_inf_vs_ctl_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+hemocytes_inf_vs_ctl_volcano[which(abs(hemocytes_inf_vs_ctl_volcano$log2FoldChange)<1), "sig"] <- "Not-sig"
+
+volcano <- ggplot(hemocytes_inf_vs_ctl_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+  #geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table <- hemocytes_inf_vs_ctl_volcano[which(hemocytes_inf_vs_ctl_volcano$padj < alpha),] %>% arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table, aes(y = reorder(rownames(significant_table), log2FoldChange), x = log2FoldChange)) +
+         geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+         geom_bar(stat = "identity", color = "black", fill = ifelse(significant_table$log2FoldChange > 0, "brown", "darkgreen"), alpha = 0.7) +
+         # coord_flip() +
+         theme_classic(base_size = 8) +
+         theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), axis.text.y = element_text(color = "black"), legend.text = element_text(size = 3.5), legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Hemocytes (control vs infected)")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table, "hemocytes_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+####
+```
+
+```{r}
+fatbody_inf_vs_ctl_volcano <- EnhancedVolcano(fatbody_inf_vs_ctl, 
+                                                                  lab = rownames(fatbody_inf_vs_ctl),
+                                                                  x = "log2FoldChange",
+                                                                  y = "padj",
+                                                                  pCutoff = 0.05,
+                                                                  FCcutoff = 1,
+                                                                  subtitle = "Fatbody (Control vs Infected)",
+                                                                  title = "",
+                                                                  axisLabSize = 14,
+                                                                  labSize = 1.5,
+                                                                  caption = "",
+                                                                  cutoffLineCol = "blue",
+                                                                  col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                  colAlpha = 0.9,
+                                                                  legendPosition = "",
+                                                                  legendLabSize = 10,
+                                                                  legendIconSize = 4,
+                                                                  pointSize = 1.5,
+                                                                  drawConnectors = TRUE)
+
+midgut_inf_vs_ctl_volcano <- EnhancedVolcano(midgut_inf_vs_ctl, 
+                                                                  lab = rownames(midgut_inf_vs_ctl),
+                                                                  x = "log2FoldChange",
+                                                                  y = "padj",
+                                                                  pCutoff = 0.05,
+                                                                  FCcutoff = 1,
+                                                                  subtitle = "Midgut (Control vs Infected)",
+                                                                  title = "",
+                                                                  axisLabSize = 14,
+                                                                  labSize = 1.5,
+                                                                  caption = "",
+                                                                  cutoffLineCol = "blue",
+                                                                  col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                  colAlpha = 0.9,
+                                                                  legendPosition = "",
+                                                                  legendLabSize = 10,
+                                                                  legendIconSize = 4,
+                                                                  pointSize = 1.5,
+                                                                  drawConnectors = TRUE)
+
+hemocytes_inf_vs_ctl_volcano <- EnhancedVolcano(hemocytes_inf_vs_ctl,
+                                                                 lab = rownames(hemocytes_inf_vs_ctl),
+                                                                 x = "log2FoldChange",
+                                                                 y = "padj",
+                                                                 pCutoff = 0.05,
+                                                                 FCcutoff = 1,
+                                                                 subtitle = "Hemocytes (Control vs Infected)",
+                                                                 title = "",
+                                                                 axisLabSize = 14,
+                                                                 labSize = 1.5,
+                                                                 caption = "",
+                                                                 cutoffLineCol = "blue",
+                                                                 col = c("gray80", "#06c289", "#055ce8", "red2"),
+                                                                 colAlpha = 0.9,
+                                                                 legendPosition = "",
+                                                                 legendLabSize = 10,
+                                                                 legendIconSize = 4,
+                                                                 pointSize = 1.5,
+                                                                 drawConnectors = TRUE)
+
+plot_grid(fatbody_inf_vs_ctl_volcano, midgut_inf_vs_ctl_volcano, hemocytes_inf_vs_ctl_volcano, labels = c("A", "B", "C"), nrow = 3, ncol = 1)
+```
+
+```{r}
+library(ggpubr)
+maplot_fatbody <- ggmaplot(fatbody_ctl_vs_inf, main = expression("Fatbody Control" %->% "Infected"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(fatbody_ctl_vs_inf)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+maplot_midgut <- ggmaplot(midgut_ctl_vs_inf, main = expression("Midgut Control" %->% "Infected"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(fatbody_ctl_vs_inf)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+maplot_hemocytes <- ggmaplot(hemocytes_ctl_vs_inf, main = expression("Hemocytes Control" %->% "Infected"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(fatbody_ctl_vs_inf)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+plot_grid(maplot_fatbody, maplot_hemocytes, maplot_midgut, labels = c("A", "B", "C"), nrow = 3, ncol = 1)
+```
+
+```{bash eval=FALSE}
+sed -i '' 's/\.g/\.00g/g' fatbody_inf_vs_ctl.txt
+sed -i '' 's/\.g/\.00g/g' midgut_inf_vs_ctl.txt
+sed -i '' 's/\.g/\.00g/g' hemocytes_inf_vs_ctl.txt
+
+awk '{print $1}' fatbody_inf_vs_ctl.txt > fatbody_inf_vs_ctl_geneID.txt
+awk '{print $1}' midgut_inf_vs_ctl.txt > midgut_inf_vs_ctl_geneID.txt
+awk '{print $1}' hemocytes_inf_vs_ctl.txt > hemocytes_inf_vs_ctl_geneID.txt
+
+sed -i '' 's/$/-v1.0.a1/g' fatbody_inf_vs_ctl_geneID.txt
+sed -i '' 's/$/-v1.0.a1/g' midgut_inf_vs_ctl_geneID.txt
+sed -i '' 's/$/-v1.0.a1/g' hemocytes_inf_vs_ctl_geneID.txt
+```
+
+```{r}
+### nosema_vs_noinfection (all only-aeromonas removed)
+
+sample_metadata_pathogen <- sample_metadata %>%
+  group_by(Pathogen) %>%
+  filter(Pathogen %in% c("noinfection", "nosema", "nosema_aeromonas"))
+
+counts_file_pathogen <- counts_file[, colnames(counts_file) %in% sample_metadata_pathogen$Sample_ID]
+
+
+muga_dds_pathogen <- DESeqDataSetFromMatrix(countData = counts_file_pathogen,
+                                                     colData = sample_metadata_pathogen,
+                                                     design = ~ Pathogen)
+
+muga_dds_pathogen$Pathogen <- relevel(muga_dds_pathogen$Pathogen, "noinfection")
+
+muga_dds_pathogen <- DESeq(muga_dds_pathogen, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds_pathogen)) > 5
+muga_dds_pathogen <- muga_dds_pathogen[keep,]
+
+resultsNames(muga_dds_pathogen)
+
+Pathogen_nosema_vs_noinfection <- results(muga_dds_pathogen,
+                                      name = "Pathogen_nosema_vs_noinfection",
+                                      lfcThreshold = 0,
+                                      alpha = 0.1)
+
+Pathogen_nosema_vs_noinfection_volcano <- as.data.frame(Pathogen_nosema_vs_noinfection)
+Pathogen_nosema_vs_noinfection_volcano <- mutate(Pathogen_nosema_vs_noinfection_volcano,
+                                             sig = ifelse(Pathogen_nosema_vs_noinfection_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+Pathogen_nosema_vs_noinfection_volcano[which(abs(Pathogen_nosema_vs_noinfection_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(Pathogen_nosema_vs_noinfection_volcano, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+#geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table_Pathogen_nosema_vs_noinfection <- Pathogen_nosema_vs_noinfection_volcano[which(Pathogen_nosema_vs_noinfection_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+
+logfoldchange_plot <- ggplot(significant_table_Pathogen_nosema_vs_noinfection, 
+                             aes(y = reorder(rownames(significant_table_Pathogen_nosema_vs_noinfection), log2FoldChange), 
+                                 x = log2FoldChange)) +
+  geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+  geom_bar(stat = "identity", 
+           color = "black", 
+           fill = ifelse(significant_table_Pathogen_nosema_vs_noinfection$log2FoldChange > 0, "brown", "darkgreen"), 
+           alpha = 0.7) +
+  # coord_flip() +
+  theme_classic(base_size = 8) +
+  theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+        axis.text.y = element_text(color = "black"), 
+        legend.text = element_text(size = 3.5), 
+        legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Pathogen_nosema_vs_noinfection")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table_Pathogen_nosema_vs_noinfection, "Pathogen_nosema_vs_noinfection.txt", sep = "\t", quote = FALSE)
+```
+
+```{r}
+##### Nosema_aeromonas vs Nosema (all aeromonas filtered); 
+
+muga_dds_pathogen$Pathogen <- relevel(muga_dds_pathogen$Pathogen, "nosema")
+
+muga_dds_pathogen <- DESeq(muga_dds_pathogen, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds_pathogen)) > 5
+muga_dds_pathogen <- muga_dds_pathogen[keep,]
+
+resultsNames(muga_dds_pathogen)
+
+Pathogen_nosemaaeromonas_vs_nosema <- results(muga_dds_pathogen,
+                                          name =  "Pathogen_nosema_aeromonas_vs_nosema",
+                                          lfcThreshold = 0,
+                                          alpha = 0.1)
+
+Pathogen_nosemaaeromonas_vs_nosema_volcano <- as.data.frame(Pathogen_nosemaaeromonas_vs_nosema)
+Pathogen_nosemaaeromonas_vs_nosema_volcano <- mutate(Pathogen_nosemaaeromonas_vs_nosema_volcano,
+                                                 sig = ifelse(Pathogen_nosemaaeromonas_vs_nosema_volcano$padj<0.05, "FDR<0.05", "Not-sig"))
+Pathogen_nosemaaeromonas_vs_nosema_volcano[which(abs(Pathogen_nosemaaeromonas_vs_nosema_volcano$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano <- ggplot(Pathogen_nosemaaeromonas_vs_nosema_volcano, 
+                  aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+#geom_text_repel(aes(label=rownames(muga_dds_results_volcano)), max.overlaps = Inf)
+
+significant_table_Pathogen_nosemaaeromonas_vs_nosema <- Pathogen_nosemaaeromonas_vs_nosema_volcano[which(Pathogen_nosemaaeromonas_vs_nosema_volcano$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+logfoldchange_plot <- ggplot(significant_table_Pathogen_nosemaaeromonas_vs_nosema, 
+                             aes(y = reorder(rownames(significant_table_Pathogen_nosemaaeromonas_vs_nosema), log2FoldChange), 
+                                 x = log2FoldChange)) +
+  geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+  geom_bar(stat = "identity", 
+           color = "black", 
+           fill = ifelse(significant_table_Pathogen_nosemaaeromonas_vs_nosema$log2FoldChange > 0, "brown", "darkgreen"), 
+           alpha = 0.7) +
+  # coord_flip() +
+  theme_classic(base_size = 8) +
+  theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+        axis.text.y = element_text(color = "black"), 
+        legend.text = element_text(size = 3.5), 
+        legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("nosemaaeromonas_vs_nosema")
+
+plot_grid(volcano, logfoldchange_plot, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table_Pathogen_nosemaaeromonas_vs_nosema, "Pathogen_nosemaaeromonas_vs_nosema.txt", sep = "\t", quote = FALSE)
+```
+
+```{r}
+library(ggpubr)
+maplot_Pathogen_nosema_vs_noinfection <- ggmaplot(Pathogen_nosema_vs_noinfection, main = expression("Nosema Infected" %->% "Non-Infected"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(Pathogen_nosema_vs_noinfection)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+maplot_Pathogen_nosemaaeromonas_vs_nosema <- ggmaplot(Pathogen_nosemaaeromonas_vs_nosema, main = expression("Coinfection with Nosema+Aeromonas" %->% "Nosema"),
+   fdr = 0.05, fc = 2, size = 1,
+   palette = c("#B31B21", "#1465AC", "darkgray"),
+   genenames = as.vector(rownames(Pathogen_nosemaaeromonas_vs_nosema)),
+   legend = "top", top = 20,
+   font.label = c("bold", 8),
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_minimal())
+
+plot_grid(maplot_Pathogen_nosema_vs_noinfection, maplot_Pathogen_nosemaaeromonas_vs_nosema, labels = c("A", "B"), nrow = 2, ncol = 1)
+```
+
+```{bash eval=FALSE}
+sed -i '' 's/\.g/\.00g/g' Pathogen_nosema_vs_noinfection.txt
+sed -i '' 's/\.g/\.00g/g' Pathogen_nosemaaeromonas_vs_nosema.txt
+
+awk '{print $1}' Pathogen_nosema_vs_noinfection.txt > Pathogen_nosema_vs_noinfection_geneID.txt
+awk '{print $1}' Pathogen_nosemaaeromonas_vs_nosema.txt > Pathogen_nosemaaeromonas_vs_nosema_geneID.txt
+
+
+sed -i '' 's/$/-v1.0.a1/g' Pathogen_nosema_vs_noinfection_geneID.txt
+sed -i '' 's/$/-v1.0.a1/g' Pathogen_nosemaaeromonas_vs_nosema_geneID.txt
+```
+
+```{r Lets find the common genes that were differentially regulated in the three tissue types}
+library(ggvenn)
+
+commongenes <- list(fatbody = rownames(significant_table_fatbody), 
+                    midgut = rownames(significant_table_midgut), 
+                    hemocytes = rownames(significant_table_hemocytes))
+ggvenn(
+  commongenes, 
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 6
+  )
+```
+
+
+```{r}
+### Only aeromonas infected and non-infected samples analyzed between different tissue types
+
+sample_metadata_noinfection_aeromonas <- sample_metadata %>% filter(Pathogen %in% c("noinfection", "aeromonas"))
+sample_metadata_noinfection_aeromonas <- sample_metadata_noinfection_aeromonas[1:12,]
+counts_file_noinfection_aeromonas <- counts_file[, colnames(counts_file) %in% sample_metadata_noinfection_aeromonas$Sample_ID]
+muga_dds_noinfection_aeromonas <- DESeqDataSetFromMatrix(countData = counts_file_noinfection_aeromonas,
+                                   colData = sample_metadata_noinfection_aeromonas,
+                                   design = ~ Tissue)
+
+
+muga_dds_noinfection_aeromonas$interaction <- factor(paste0(muga_dds_noinfection_aeromonas$Tissue, muga_dds_noinfection_aeromonas$Condition))
+muga_dds_noinfection_aeromonas$interaction
+
+muga_dds_noinfection_aeromonas$interaction <- relevel(muga_dds_noinfection_aeromonas$interaction, "FatBodycontrol")
+design(muga_dds_noinfection_aeromonas) <- ~ interaction
+muga_dds_noinfection_aeromonas <- DESeq(muga_dds_noinfection_aeromonas, test = "Wald", fitType = "local")
+
+keep <- rowSums(counts(muga_dds_noinfection_aeromonas)) > 5
+muga_dds_noinfection_aeromonas <- muga_dds_noinfection_aeromonas[keep,]
+
+resultsNames(muga_dds_noinfection_aeromonas)
+fatbody_inf_vs_ctl_nonosema <- results(muga_dds_noinfection_aeromonas,
+                              name = "interaction_FatBodyInfected_vs_FatBodycontrol",
+                              lfcThreshold = 0,
+                              alpha = 0.05)
+
+midgut_inf_vs_ctl_nonosema <- results(muga_dds_noinfection_aeromonas,
+                             contrast = c("interaction", "MidGutInfected", "MidGutcontrol"),
+                             lfcThreshold = 0.5,
+                             alpha = 0.05)
+
+hemocytes_inf_vs_ctl_nonosema <- results(muga_dds_noinfection_aeromonas,
+                                contrast = c("interaction", "HemocytesInfected", "Hemocytescontrol"),
+                                lfcThreshold = 0,
+                                alpha = 0.05)
+
+####fatbody
+topGenesfatbody_noinfection_aeromonas <- as.data.frame(fatbody_inf_vs_ctl_nonosema) %>%
+  rownames_to_column("GeneID") %>% 
+  arrange(padj) %>% 
+  head(50)
+fatbody_inf_vs_ctl_volcano_nonosema <- as.data.frame(fatbody_inf_vs_ctl_nonosema)
+fatbody_inf_vs_ctl_volcano_nonosema <- mutate(fatbody_inf_vs_ctl_volcano_nonosema,
+                                     sig = ifelse(fatbody_inf_vs_ctl_volcano_nonosema$padj<0.05, "FDR<0.05", "Not-sig"))
+fatbody_inf_vs_ctl_volcano_nonosema[which(abs(fatbody_inf_vs_ctl_volcano_nonosema$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano_nonosema <- ggplot(fatbody_inf_vs_ctl_volcano_nonosema, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+#geom_text_repel(aes(label=rownames(muga_dds_noinfection_aeromonas_results_volcano)), max.overlaps = Inf)
+
+significant_table_nonosema <- fatbody_inf_vs_ctl_volcano_nonosema[which(fatbody_inf_vs_ctl_volcano_nonosema$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+
+logfoldchange_plot_nonosema <- ggplot(topGenesfatbody_noinfection_aeromonas, aes(y = reorder(GeneID, log2FoldChange), x = log2FoldChange)) +
+  geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+  geom_bar(stat = "identity", 
+           color = "black", 
+           fill = ifelse(topGenesfatbody_noinfection_aeromonas$log2FoldChange > 0, "brown", "darkgreen"), 
+           alpha = 0.7) +
+  # coord_flip() +
+  theme_classic(base_size = 8) +
+  theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+        axis.text.y = element_text(color = "black"), 
+        legend.text = element_text(size = 3.5), 
+        legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Fatbody (control vs infected)")
+
+plot_grid(volcano_nonosema, logfoldchange_plot_nonosema, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table_nonosema, "nonosema_fatbody_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+
+
+####hemocytes
+
+topGeneshemocytes_noinfection_aeromonas <- as.data.frame(hemocytes_inf_vs_ctl_nonosema) %>%
+  rownames_to_column("GeneID") %>% 
+  arrange(padj) %>% 
+  head(50)
+hemocytes_inf_vs_ctl_volcano_nonosema <- as.data.frame(hemocytes_inf_vs_ctl_nonosema)
+hemocytes_inf_vs_ctl_volcano_nonosema <- mutate(hemocytes_inf_vs_ctl_volcano_nonosema,
+                                              sig = ifelse(hemocytes_inf_vs_ctl_volcano_nonosema$padj<0.05, "FDR<0.05", "Not-sig"))
+hemocytes_inf_vs_ctl_volcano_nonosema[which(abs(hemocytes_inf_vs_ctl_volcano_nonosema$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano_nonosema <- ggplot(hemocytes_inf_vs_ctl_volcano_nonosema, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+#geom_text_repel(aes(label=rownames(muga_dds_noinfection_aeromonas_results_volcano)), max.overlaps = Inf)
+
+significant_table_nonosema <- hemocytes_inf_vs_ctl_volcano_nonosema[which(hemocytes_inf_vs_ctl_volcano_nonosema$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+
+logfoldchange_plot_nonosema <- ggplot(topGeneshemocytes_noinfection_aeromonas, aes(y = reorder(GeneID, log2FoldChange), x = log2FoldChange)) +
+  geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+  geom_bar(stat = "identity", 
+           color = "black", 
+           fill = ifelse(topGeneshemocytes_noinfection_aeromonas$log2FoldChange > 0, "brown", "darkgreen"), 
+           alpha = 0.7) +
+  # coord_flip() +
+  theme_classic(base_size = 8) +
+  theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+        axis.text.y = element_text(color = "black"), 
+        legend.text = element_text(size = 3.5), 
+        legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Hemocytes (control vs infected)")
+
+plot_grid(volcano_nonosema, logfoldchange_plot_nonosema, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table_nonosema, "nonosema_hemocytes_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+
+
+####midgut
+topGenesmidgut_noinfection_aeromonas <- as.data.frame(midgut_inf_vs_ctl_nonosema) %>%
+  rownames_to_column("GeneID") %>% 
+  arrange(padj) %>% 
+  head(50)
+midgut_inf_vs_ctl_volcano_nonosema <- as.data.frame(midgut_inf_vs_ctl_nonosema)
+midgut_inf_vs_ctl_volcano_nonosema <- mutate(midgut_inf_vs_ctl_volcano_nonosema,
+                                              sig = ifelse(midgut_inf_vs_ctl_volcano_nonosema$padj<0.05, "FDR<0.05", "Not-sig"))
+midgut_inf_vs_ctl_volcano_nonosema[which(abs(midgut_inf_vs_ctl_volcano_nonosema$log2FoldChange)<1.0), "sig"] <- "Not-sig"
+
+volcano_nonosema <- ggplot(midgut_inf_vs_ctl_volcano_nonosema, aes(log2FoldChange, -log10(padj))) +
+  geom_point(aes(col=sig), alpha = 0.8) +
+  scale_color_manual(values = c("red", "black")) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = c(.85,.85), legend.title = element_blank())
+#geom_text_repel(aes(label=rownames(muga_dds_noinfection_aeromonas_results_volcano)), max.overlaps = Inf)
+
+significant_table_nonosema <- midgut_inf_vs_ctl_volcano_nonosema[which(midgut_inf_vs_ctl_volcano_nonosema$padj < alpha),] %>%
+  arrange(desc(log2FoldChange))
+
+logfoldchange_plot_nonosema <- ggplot(topGenesmidgut_noinfection_aeromonas, aes(y = reorder(GeneID, log2FoldChange), x = log2FoldChange)) +
+  geom_vline(xintercept = 0.0, color = "indianred", size = 0.8) +
+  geom_bar(stat = "identity", 
+           color = "black", 
+           fill = ifelse(topGenesmidgut_noinfection_aeromonas$log2FoldChange > 0, "brown", "darkgreen"), 
+           alpha = 0.7) +
+  # coord_flip() +
+  theme_classic(base_size = 8) +
+  theme(axis.text.x = element_text(hjust = 0, vjust = 0.5, color = "black", face = "bold"), 
+        axis.text.y = element_text(color = "black"), 
+        legend.text = element_text(size = 3.5), 
+        legend.key.size = unit(0.05, "cm")) +
+  xlab("Log2 Fold Change") +
+  ylab("Midgut (control vs infected)")
+
+plot_grid(volcano_nonosema, logfoldchange_plot_nonosema, labels = c("A", "B"), rel_widths = c(2,2))
+write.table(significant_table_nonosema, "nonosema_midgut_inf_vs_ctl.txt", sep = "\t", quote = FALSE)
+
+
+library(ggpubr)
+maplot_fatbody_inf_vs_ctl_nonosema <- ggmaplot(fatbody_inf_vs_ctl_nonosema, main = expression("Fatbody (Control vs Infected)"),
+                                                         fdr = 0.05, fc = 2, size = 1,
+                                                         palette = c("#B31B21", "#1465AC", "darkgray"),
+                                                         genenames = as.vector(rownames(fatbody_inf_vs_ctl_nonosema)),
+                                                         legend = "top", top = 20,
+                                                         font.label = c("bold", 8),
+                                                         font.legend = "bold",
+                                                         font.main = "bold",
+                                                         ggtheme = ggplot2::theme_minimal())
+
+maplot_hemocytes_inf_vs_ctl_nonosema <- ggmaplot(hemocytes_inf_vs_ctl_nonosema, main = expression("Hemocytes (Control vs Infected)"),
+                                                          fdr = 0.05, fc = 2, size = 1,
+                                                          palette = c("#B31B21", "#1465AC", "darkgray"),
+                                                          genenames = as.vector(rownames(hemocytes_inf_vs_ctl_nonosema)),
+                                                          legend = "top", top = 20,
+                                                          font.label = c("bold", 8),
+                                                          font.legend = "bold",
+                                                          font.main = "bold",
+                                                          ggtheme = ggplot2::theme_minimal())
+
+maplot_midgut_inf_vs_ctl_nonosema <- ggmaplot(midgut_inf_vs_ctl_nonosema, main = expression("Midgut (Control vs Infected)"),
+                                                          fdr = 0.05, fc = 2, size = 1,
+                                                          palette = c("#B31B21", "#1465AC", "darkgray"),
+                                                          genenames = as.vector(rownames(midgut_inf_vs_ctl_nonosema)),
+                                                          legend = "top", top = 20,
+                                                          font.label = c("bold", 8),
+                                                          font.legend = "bold",
+                                                          font.main = "bold",
+                                                          ggtheme = ggplot2::theme_minimal())
+
+plot_grid(maplot_fatbody_inf_vs_ctl_nonosema, maplot_hemocytes_inf_vs_ctl_nonosema, maplot_midgut_inf_vs_ctl_nonosema, labels = c("A", "B", "C"), nrow = 3, ncol = 1)
+```
+
+
+
+
+```{r}
+library(biomartr)
+
+getGenome(db="refseq", organism = "Bombyx mori", path = file.path("_ncbi_downloads", "genomes"))
+
+getGFF(db="refseq", organism = "Bombyx mori", path = file.path("_ncbi_downloads", "gff"))
+
+getProteome(db="refseq", organism = "Bombyx mori", path = file.path("_ncbi_downloads", "protein"))
+
+getCDS(db="refseq", organism = "Bombyx mori", path = file.path("_ncbi_downloads", "CDS"))
+
+getRepeatMasker(db="refseq", organism = "Bombyx mori", path = file.path("_ncbi_downloads", "repeatmasker"))
+
+Bombyxmori_genome <- read_genome("_ncbi_downloads/genomes/Bombyx_mori_genomic_refseq.fna.gz", format = "fasta", obj.type = "Biostrings")
+
+Bombyxmori_gff <- read_gff("_ncbi_downloads/gff/Bombyx_mori_genomic_refseq.gff.gz")
+
+Bombyxmori_cds <- read_gff("_ncbi_downloads/CDS/Bombyx_mori_cds_from_genomic_refseq.fna.gz")
+
+Bombyxmori_protein <- read_proteome("_ncbi_downloads/protein/Bombyx_mori_protein_refseq.faa.gz")
+```
+
+
