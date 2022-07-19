@@ -1,0 +1,836 @@
+---
+title: "Gut microbiome of goldensilkmoth from Saturniids"
+author: "Rajal Debnath"
+date: "20/05/2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, fig.width=4, fig.height=4, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.table.format = "latex")
+```
+
+# Loading libraries
+
+```{r loading required libraries, message=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+library(dada2)
+library(vegan)
+library(ggplot2)
+library(reshape2)
+library(tidyverse)
+library(devtools)
+library(knitr)
+library(stringr)
+library(Biostrings)
+library(kableExtra)
+library(here)
+library(phyloseq)
+library(DECIPHER)
+```
+
+```{r}
+# dada2 - DADA2, a sequence inference method, uses a probabilistic model and an expectation-maximization algorithm to test whether less abundant sequences are derived from higher abundance sequences
+
+path <- here("data/raw")
+list.files(path)
+```
+
+```{r}
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1.fastq and SAMPLENAME_R2.fastq
+fnFs <- sort(list.files(path, pattern="_R1.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2.fastq", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+sample.names
+```
+
+
+```{r}
+plotQualityProfile(fnFs[1:19])
+```
+
+```{r}
+plotQualityProfile(fnRs[1:19])
+```
+
+```{r}
+# Place filtered files in filtered/ subdirectory
+path1 <- here("data/processed/")
+filtFs <- file.path(path1, "dadafiltered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path1, "dadafiltered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+```{r}
+# From the quality profiles plots above the froward sequences in R1 files can be trimmed at 245 bases an reverse at 210 bases.
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(245,210),
+              maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=TRUE) # On Windows set multithread=FALSE
+out
+```
+
+```{r}
+# Total of 104737290 total bases in 498749 reads from 3 samples were used to learn the sequencing error model by alternating estimation of the error rates and inference of sample composition until they converge on a jointly consistent solution.It also indicates a deeply sequenced dataset as 3 samples itself could cover 1 million reads. estimated error rates (black line) are a good fit to the observed rates (points), and the error rates drop with increased quality as expected
+errF <- learnErrors(filtFs, multithread=TRUE)
+errR <- learnErrors(filtRs, multithread=TRUE)
+plotErrors(errF, nominalQ=TRUE)
+```
+
+```{r}
+dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
+```
+
+```{r}
+dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
+```
+
+```{r}
+dadaFs[[1]]
+dadaRs[[1]]
+```
+
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+```
+
+```{r}
+table(nchar(getSequences(seqtab)))
+hist(nchar(getSequences(seqtab)), main="Distribution of sequence lengths")
+```
+
+```{r}
+seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% 421:450]
+```
+
+```{r}
+seqtab.nochim <- removeBimeraDenovo(seqtab2, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+sum(seqtab.nochim)/sum(seqtab2)
+```
+
+## Alternative assignment of taxa using IDTAXA from DECIPHER package
+```{r}
+# dna <- DNAStringSet(getSequences(seqtab.nochim)) # Create a DNAStringSet from the ASVs
+# load(here("data/references/SILVA_SSU_r138_2019.RData")) # CHANGE TO THE PATH OF YOUR TRAINING SET
+# ids <- IdTaxa(dna, trainingSet, strand="top", processors=NULL, verbose=FALSE) # use all processors
+# ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species") # ranks of interest
+# # Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
+# taxid <- t(sapply(ids, function(x) {
+#         m <- match(ranks, x$rank)
+#         idtaxa <- x$taxon[m]
+#         idtaxa[startsWith(idtaxa, "unclassified_")] <- NA
+#         idtaxa
+# }))
+# colnames(taxid) <- ranks; rownames(taxid) <- getSequences(seqtab.nochim)
+  # tax table:
+  # creating table of taxonomy and setting any that are unclassified as "NA"
+# ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species")
+# asv_tax <- t(sapply(ids, function(x) {
+#   m <- match(ranks, x$rank)
+#   taxa <- x$taxon[m]
+#   taxa[startsWith(taxa, "unclassified_")] <- NA
+#   taxa
+# }))
+# colnames(asv_tax) <- ranks
+# rownames(asv_tax) <- gsub(pattern=">", replacement="", x=asv_headers)
+
+## Construct a phylogenetic tree by first aligning using the decipher package
+
+# seqs <- getSequences(seqtab.nochim)
+# names(seqs) <- seqs # This propagates to the tip labels of the tree
+# alignment <- AlignSeqs(DNAStringSet(seqs), anchor=NA)
+
+## tree using phangorn package
+
+# library(phangorn)
+# phang.align <- phyDat(as(alignment, "matrix"), type="DNA")
+# dm <- dist.ml(phang.align)
+# treeNJ <- NJ(dm) # Note, tip order != sequence order
+# fit = pml(treeNJ, data=phang.align)
+# 
+# ## negative edges length changed to 0!
+# 
+# fitGTR <- update(fit, k=4, inv=0.2)
+# fitGTR <- optim.pml(fitGTR, model="GTR", optInv=TRUE, optGamma=TRUE,
+#                       rearrangement = "stochastic", control = pml.control(trace = 0))
+# detach("package:phangorn", unload=TRUE)
+
+## Create a phyloseq object
+
+# mapping_file <- read.delim(here("data/processed/Sample_metadata_copy.txt"))
+# mapping_file <- as_tibble(mapping_file)
+# samplemetadata <- sample_data(mapping_file)
+# rownames(samplemetadata) <- samplemetadata$SampleID
+
+# muga0 <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE), 
+#                samplemetadata, 
+#                tax_table(taxa),
+#                phy_tree(fitGTR$tree))
+# 
+# dna <- Biostrings::DNAStringSet(taxa_names(muga0))
+# names(dna) <- taxa_names(muga0)
+# muga0 <- merge_phyloseq(muga0, dna)
+# taxa_names(muga0) <- paste0("ASV", seq(ntaxa(muga0)))
+# muga0
+```
+
+## Taxonomy assignment using DADA2 package
+
+```{r}
+taxa <- assignTaxonomy(seqtab.nochim, here("data/references/silva_nr99_v138.1_wSpecies_train_set.fa"),
+                       multithread=TRUE,
+                       tryRC = TRUE)
+taxa <- addSpecies(taxa, here("data/references/silva_species_assignment_v138.1.fa"))
+```
+
+```{r}
+ # giving our seq headers more manageable names (ASV_1, ASV_2...)
+asv_seqs <- colnames(seqtab.nochim)
+asv_headers <- vector(dim(seqtab.nochim)[2], mode="character")
+
+for (i in 1:dim(seqtab.nochim)[2]) {
+  asv_headers[i] <- paste(">ASV", i, sep="")
+}
+
+  # making and writing out a fasta of our final ASV seqs:
+asv_fasta <- c(rbind(asv_headers, asv_seqs))
+write(asv_fasta, here("data/RData/ASVs.fa"))
+      
+  # count table:
+asv_tab <- t(seqtab.nochim)
+row.names(asv_tab) <- sub(">", "", asv_headers)
+write.table(asv_tab, here("data/RData/ASVs_counts.tsv"), sep="\t", quote=F, col.names=NA)
+
+  # taxonomy table:
+asv_tax <- taxa
+row.names(asv_tax) <- sub(">", "", asv_headers)
+
+write.table(asv_tax, here("data/RData/ASVs_taxonomy.tsv"), sep = "\t", quote=F, col.names=NA)
+```
+
+### Align the sequences to generate a phylogenetic tree (using decipher package for alignment)
+```{r}
+for (i in 1:dim(seqtab.nochim)[2]) {
+  asv_headers[i] <- paste("ASV", i, sep="")
+}
+asv_seqs <- getSequences(seqtab.nochim)
+names(asv_seqs) <- asv_headers
+
+#names(seqs) <- seqs # This propagates to the tip labels of the tree
+alignment <- AlignSeqs(DNAStringSet(asv_seqs), anchor=NA)
+```
+
+```{r}
+library(phangorn)
+phang.align <- phyDat(as(alignment, "matrix"), type="DNA")
+dm <- dist.ml(phang.align)
+treeNJ <- NJ(dm) # Note, tip order != sequence order
+fit = pml(treeNJ, data=phang.align)
+
+## negative edges length changed to 0!
+
+fitGTR <- update(fit, k=4, inv=0.2)
+fitGTR <- optim.pml(fitGTR, model="GTR", optInv=TRUE, optGamma=TRUE,
+                      rearrangement = "stochastic", control = pml.control(trace = 0))
+detach("package:phangorn", unload=TRUE)
+```
+## Construct a phyloseq object by importing sample data first into environemnt
+```{r}
+mapping_file <- read.delim(here("data/processed/Sample_metadata_copy.txt"))
+mapping_file <- as_tibble(mapping_file)
+samplemetadata <- sample_data(mapping_file)
+rownames(samplemetadata) <- samplemetadata$SampleID
+```
+
+```{r}
+muga0 <- phyloseq(otu_table(asv_tab, taxa_are_rows=TRUE), 
+               samplemetadata, 
+               tax_table(asv_tax),
+               phy_tree(fitGTR$tree))
+```
+
+
+```{r}
+kable(otu_table(muga0)[1:5,1:10], "html", booktabs =T) %>% 
+  kable_styling(latex_options = "striped", 
+                            full_width = FALSE, 
+                            position = "left", 
+                            font_size = 10)
+
+kableExtra::kable(tax_table(muga0)[1:5,1:6], "html", booktabs =T) %>% 
+  kableExtra::kable_styling(latex_options = c("striped","scale_down"), 
+                            full_width = FALSE, 
+                            position = "left", 
+                            font_size = 10)
+
+kableExtra::kable(t(sample_data(muga0)[1:5,2:5]), "html", booktabs =T) %>% 
+  kableExtra::kable_styling(latex_options = "striped", 
+                            full_width = FALSE, 
+                            position = "left", 
+                            font_size = 10)
+```
+
+```{r no of sequences in each sample libraries, warning=FALSE}
+sample_sums(muga0)
+```
+
+```{r check for kingdom assignment of sequences, warning=FALSE}
+get_taxa_unique(muga0, taxonomic.rank = "Kingdom")
+```
+
+**Filter out taxa that are not present in any of the samples**
+```{r filter taxa with 0 sequences across samples, warning=FALSE}
+muga0 <- prune_taxa(taxa_sums(muga0) > 0, muga0)
+muga0
+```
+
+##Lets filter out mitochondria and chloroplast sequences from our datasets
+```{r}
+## there are 252 taxa classified as Chloroplast and 16 taxa as Mitochondria
+muga0 <- subset_taxa(muga0, Order != "Chloroplast" & Family != "Mitochondria")
+muga0
+sample_sums(muga0)
+muga0 <- prune_samples(sample_sums(muga0)>3, muga0)
+sample_sums(muga0)
+```
+
+```{r veganotu & vegansample function, warning=FALSE, include=FALSE}
+# For extracting OTU table
+veganotu = function(physeq) {
+    require("vegan")
+    OTU = otu_table(physeq)
+    if (taxa_are_rows(OTU)) {
+        OTU = t(OTU)
+    }
+    return(as.data.frame(OTU))
+}
+
+# For extracting sample table
+vegansam <- function(physeq) {
+  sam <- sample_data(physeq)
+  i <- sapply(sam, is.numeric)
+  j <- sapply(sam, is.character)
+  k <- sapply(sam, is.factor)
+  sam <- as.matrix(sam)
+  sam <- as.data.frame(sam)
+  sam[i] <- lapply(sam[i], as.numeric)
+  sam[j] <- lapply(sam[j], as.character)
+  sam[k] <- lapply(sam[k], as.factor)
+  return(sam)
+}
+```
+
+```{r}
+##### ADONIS ###########
+
+# Function to run adonis test on a physeq object and a variable from metadata 
+doadonis <- function(physeq, category) {
+  physeq.scale <- scale_reads(physeq, min(sample_sums(physeq)))
+  bdist <- phyloseq::distance(physeq.scale, "bray")
+  col <- as(sample_data(physeq), "data.frame")[ ,category]
+  
+  # Adonis test
+  adonis.bdist <- adonis(bdist ~ col)
+  print("Adonis results:")
+  print(adonis.bdist)
+  
+  # Homogeneity of dispersion test
+  betatax = betadisper(bdist,col)
+  p = permutest(betatax)
+  print("Betadisper results:")
+  print(p$tab)
+}
+
+########## Bar Plots #################
+
+# This function takes a phyloseq object, agglomerates OTUs to the desired taxonomic rank, 
+# prunes out OTUs below a certain relative proportion in a sample (ie 1% ) 
+# and melts the phyloseq object into long format.
+transform_and_melt <- function(physeq, taxrank, prune) {
+  
+  # Agglomerate all otu's by given taxonomic level
+  physeq_taxrank <- tax_glom(physeq, taxrank = taxrank)
+  
+  # Create a new phyloseq object which removes taxa from each sample below the prune parameter
+  physeq_taxrank.prune <- transform_sample_counts(physeq_taxrank,function(x) {x/sum(x)})
+  otu_table(physeq_taxrank.prune)[otu_table(physeq_taxrank.prune) < prune] <- 0
+  physeq_taxrank.prune <- prune_taxa(taxa_sums(physeq_taxrank.prune) > 0, physeq_taxrank.prune)
+  
+  # Melt into long format and sort by sample and taxrank
+  physeq_taxrank.long <- psmelt(physeq_taxrank.prune)
+  names(physeq_taxrank.long)[names(physeq_taxrank.long) == taxrank] <- "Taxonomy"
+  physeq_taxrank.long <- arrange(physeq_taxrank.long, Sample, Taxonomy)
+
+  # Return long data frame
+  return(physeq_taxrank.long)
+}
+```
+
+```{r we will not use veganotu and vegansample function here}
+##Just in case if you want the community matrix for use in other tools like vegan
+
+# Extract abundance matrix from the phyloseq object
+# muga0_otu <- as(otu_table(muga0), "matrix")
+# muga0_otu <- as.data.frame(muga0_otu)
+# 
+# #obtain the sample data
+muga0_sample <- as(sample_data(muga0), "matrix")
+muga0_sample <- as.data.frame(muga0_sample)
+
+#vegan format otutable
+muga0_otu_vegan <- veganotu(muga0)
+```
+
+
+### Alpha diversity analysis of the samples
+**Tidy your alpha diversity file to include the corresponding groupings**  
+
+```{r}
+rarecurve(t(otu_table(muga0)), step=50, cex=0.5)
+muga0_rarefied <- rarefy_even_depth(muga0, sample.size = min(sample_sums(muga0)))
+rarecurve(t(otu_table(muga0_rarefied)), step=50, cex=0.5)
+muga0_rarefied
+muga0_otu_rarefy <- veganotu(muga0_rarefied)
+```
+
+```{r obs chao1 shannon simpson pielou dataframe, warning=FALSE, include=TRUE}
+# Here 'diverstiy' function within vegan package for shannon, simpson and fishers alpha indices  
+# and estimateR function within vegan package for chao1, observed, ACE indices 
+# Chao1 can be calculated only on integer
+# To tranform abundance data (integer) into proportions we can use the decostand function within vegan package
+
+
+
+# Dataframe of No. of species
+N <- specnumber(muga0_otu_rarefy)
+df_N <- data.frame(sample = names(N), estimate = N, index=rep("Number", length(N)),
+                   Isolation_source = muga0_sample$Isolation_source,
+                   Developmental_stage = muga0_sample$Devlopmental_stage,
+                   Seasonality = muga0_sample$Seasonality,
+                   Feed_plant = muga0_sample$Feed_plant,
+                   Month = muga0_sample$Month)
+
+# Dataframe of Chao1 index
+chao1 <- estimateR(muga0_otu_rarefy)[2,]
+df_chao1 <- data.frame(sample = names(chao1), estimate = chao1, index = rep("Chao1", length(chao1)),
+                       Isolation_source = muga0_sample$Isolation_source,
+                       Developmental_stage = muga0_sample$Devlopmental_stage,
+                       Seasonality = muga0_sample$Seasonality,
+                       Feed_plant = muga0_sample$Feed_plant,
+                       Month = muga0_sample$Month)
+
+# Dataframe of Shannon index
+shannon <- vegan::diversity(muga0_otu_rarefy, "shannon")
+df_shannon <- data.frame(sample = names(shannon), estimate = shannon, index = rep("Shannon", length(shannon)),
+                         Isolation_source = muga0_sample$Isolation_source,
+                         Developmental_stage = muga0_sample$Devlopmental_stage,
+                         Seasonality = muga0_sample$Seasonality,
+                         Feed_plant = muga0_sample$Feed_plant,
+                         Month = muga0_sample$Month)
+
+# Dataframe of Simpson index
+simpson <- vegan::diversity(muga0_otu_rarefy, "simpson")
+df_simpson <- data.frame(sample = names(simpson), estimate = simpson, index = rep("Simpson", length(simpson)),
+                         Isolation_source = muga0_sample$Isolation_source,
+                         Developmental_stage = muga0_sample$Devlopmental_stage,
+                         Seasonality = muga0_sample$Seasonality,
+                         Feed_plant = muga0_sample$Feed_plant,
+                         Month = muga0_sample$Month)
+
+# Dataframe of Pielou index
+pielou <- shannon/log(N)
+df_pielou <- data.frame(sample = names(pielou), estimate = pielou, index = rep("Pielou", length(pielou)),
+                        Isolation_source = muga0_sample$Isolation_source,
+                        Developmental_stage = muga0_sample$Devlopmental_stage,
+                        Seasonality = muga0_sample$Seasonality,
+                        Feed_plant = muga0_sample$Feed_plant,
+                        Month = muga0_sample$Month)
+```
+
+```{r Faithphylodiv dataframe, message=FALSE, warning=FALSE, include=TRUE}
+# Faith phylogenetic diversity
+library(picante)
+library(phangorn)
+phylo_tree <- phy_tree(muga0_rarefied)
+phylo_tree <- phangorn::midpoint(phylo_tree)
+
+faith_pd <- pd(veganotu(muga0_rarefied), tree = phylo_tree, include.root = FALSE)
+df_faith <- faith_pd %>% dplyr::select(PD)
+df_faith <- data.frame(sample = rownames(df_faith), estimate = df_faith$PD, index = rep("Faith", length(df_faith)),
+                       Isolation_source = muga0_sample$Isolation_source,
+                       Developmental_stage = muga0_sample$Devlopmental_stage,
+                       Seasonality = muga0_sample$Seasonality,
+                       Feed_plant = muga0_sample$Feed_plant,
+                       Month = muga0_sample$Month)
+rownames(df_faith) <- df_faith$sample
+```
+
+# Create a consolidated dataframe (tibble) both in wide and long format using pivot_wider and pivot_longer function
+```{r Alphadiv dataframe wide and long format, warning=FALSE, include=TRUE}
+# Comibine all the dataframe into one
+alphadiversity_dataframe <- rbind(df_N, df_chao1, df_shannon, df_simpson, df_faith)
+alphadiversity_dataframe <- as_tibble(alphadiversity_dataframe)
+alphadiversity_dataframe_wide <- pivot_wider(alphadiversity_dataframe, names_from = index, values_from = estimate)
+alphadiversity_dataframe_long <- pivot_longer(alphadiversity_dataframe_wide, Number:Faith, names_to = "index", values_to = "estimate")
+```
+
+# Now that we know how to plot individual diversity estimate across different sample groupings lets combine them,
+# a simple function within ggplot2 facet_wrap can do this
+```{r multiplot alphadiv, include=TRUE, warining=FALSE}
+alphadiversity_dataframe_long[1:5,]
+multi_plot <- ggplot(alphadiversity_dataframe_long, aes(x = Isolation_source, y = estimate)) +
+  geom_violin(trim = FALSE, alpha = 0.2) +
+  geom_boxplot(outlier.color = "red", width = 0.1, alpha = 0.5) +
+  geom_jitter(color = "black", alpha = 0.3) +
+  facet_wrap(~ index, scales = "free") +
+  theme_classic() +
+  theme(axis.text.x = element_text(hjust = 0, vjust=0.5, color = "black", face = "bold", size = 10), axis.text.y = element_text(face = "bold", color = "black"))
+multi_plot
+```
+
+**Calculating the mean of diversity estimates across different ecotypes**
+
+```{r shannon diversity mean}
+# Mean of shannon diversity between upland and lowland types
+mean_shannon <- alphadiversity_dataframe_long %>%
+  filter(index == "Shannon") %>%
+  group_by(Feed_plant) %>%
+  summarise(mean = mean(estimate, na.rm = TRUE), .groups = "drop")
+mean_shannon
+```
+
+```{r}
+# Mean of chao1 diversity between upland and lowland types
+mean_chao1 <- alphadiversity_dataframe_long %>%
+  filter(index == "Chao1") %>%
+  group_by(Feed_plant) %>%
+  summarise(mean = mean(estimate, na.rm = TRUE), .groups = "drop")
+mean_chao1
+```
+
+```{r}
+# Mean of simpson diversity between upland and lowland types
+mean_simpson <- alphadiversity_dataframe_long %>%
+  filter(index == "Simpson") %>%
+  group_by(Feed_plant) %>%
+  summarise(mean = mean(estimate, na.rm = TRUE), .groups = "drop")
+mean_simpson
+```
+
+```{r}
+# Mean of faith diversity between Feed plant types
+mean_faith <- alphadiversity_dataframe_long %>%
+  filter(index == "Faith") %>%
+  group_by(Feed_plant) %>%
+  summarise(mean = mean(estimate, na.rm = TRUE), .groups = "drop")
+mean_faith
+```
+
+## Statistical testing of alpha divresity estimates across different Ecotypes (parametric and non-parametric)
+```{r}
+shannon_subset <- alphadiversity_dataframe_long %>%
+  filter(index == "Shannon") %>%
+  mutate(Feed_plant = as.factor(Feed_plant))
+chao1_subset <- alphadiversity_dataframe_long %>%
+  filter(index == "Chao1") %>%
+  mutate(Feed_plant = as.factor(Feed_plant))
+simpson_subset <- alphadiversity_dataframe_long %>%
+  filter(index == "Simpson") %>%
+  mutate(Feed_plant = as.factor(Feed_plant))
+faith_subset <- alphadiversity_dataframe_long %>%
+  filter(index == "Faith") %>%
+  mutate(Feed_plant = as.factor(Feed_plant))
+pielou_subset <- alphadiversity_dataframe_long %>%
+  filter(index == "Pielou") %>%
+  mutate(Feed_plant = as.factor(Feed_plant))
+```
+
+```{r}
+## check normality of dataset
+(shapiro.test(alphadiversity_dataframe_wide$Number))
+(shapiro.test(alphadiversity_dataframe_wide$Chao1))
+(shapiro.test(alphadiversity_dataframe_wide$Shannon))
+(shapiro.test(alphadiversity_dataframe_wide$Simpson))
+(shapiro.test(alphadiversity_dataframe_wide$Faith))
+
+
+##For categorical variable (Feed_plant, Isolation_source, Developmental_stage, Seasonality, Month) with more than two levels
+###Kruskal wallis test to check significance in difference in alpha diversity measures during difference feed sources
+summary(aov(Number ~ Feed_plant, data = alphadiversity_dataframe_wide))
+summary(aov(Chao1 ~ Feed_plant, data = alphadiversity_dataframe_wide))
+summary(aov(Shannon ~ Feed_plant, data = alphadiversity_dataframe_wide))
+summary(aov(Simpson ~ Feed_plant, data = alphadiversity_dataframe_wide))
+summary(aov(Faith ~ Feed_plant, data = alphadiversity_dataframe_wide))
+
+library(agricolae)
+aov_faith_feed <- aov(Faith ~ Feed_plant, data = alphadiversity_dataframe_wide)
+hsd_test <- TukeyHSD(aov_faith_feed)
+hsd_res <- HSD.test(aov_faith_feed, "Feed_plant", group=T)$groups
+hsd_res
+
+
+summary(aov(Number ~ Isolation_source, data = alphadiversity_dataframe_wide))
+summary(aov(Chao1 ~ Isolation_source, data = alphadiversity_dataframe_wide))
+summary(aov(Shannon ~ Isolation_source, data = alphadiversity_dataframe_wide))
+summary(aov(Simpson ~ Isolation_source, data = alphadiversity_dataframe_wide))
+summary(aov(Faith ~ Isolation_source, data = alphadiversity_dataframe_wide))
+
+summary(aov(Number ~ Seasonality, data = alphadiversity_dataframe_wide))
+summary(aov(Chao1 ~ Seasonality, data = alphadiversity_dataframe_wide))
+summary(aov(Shannon ~ Seasonality, data = alphadiversity_dataframe_wide))
+summary(aov(Simpson ~ Seasonality, data = alphadiversity_dataframe_wide))
+summary(aov(Faith ~ Seasonality, data = alphadiversity_dataframe_wide))
+
+summary(aov(Number ~ Month, data = alphadiversity_dataframe_wide))
+summary(aov(Chao1 ~ Month, data = alphadiversity_dataframe_wide))
+summary(aov(Shannon ~ Month, data = alphadiversity_dataframe_wide))
+summary(aov(Simpson ~ Month, data = alphadiversity_dataframe_wide))
+summary(aov(Faith ~ Month, data = alphadiversity_dataframe_wide))
+
+# # Welch t-test for alpha diversity esitmate between the two Ecotypes
+# # Null hypothesis Shannon diversity is not different between Lowland and Upland rhizosphere microbiome
+# (shannon_ttest <- t.test(estimate ~ Feed_plant, data = shannon_subset))
+# (chao1_ttest <- t.test(estimate ~ Feed_plant, data = chao1_subset))
+# (simpson_ttest <- t.test(estimate ~ Feed_plant, data = simpson_subset))
+# (faith_ttest <- t.test(estimate ~ Feed_plant, data = faith_subset))
+# 
+# # Wilcoxon rank sum test for non normal distribution of data
+# (shannon_wilcoxtest <- wilcox.test(estimate ~ Feed_plant, data = shannon_subset))
+# (chao1_wilcoxtest <- wilcox.test(estimate ~ Feed_plant, data = chao1_subset))
+# (simpson_wilcoxtest <- wilcox.test(estimate ~ Feed_plant, data = simpson_subset))
+# (faith_wilcoxtest <- wilcox.test(estimate ~ Feed_plant, data = faith_subset))
+```
+
+
+
+
+
+
+
+
+
+
+```{r PCOA full dataset}
+library(ggrepel)
+# PCOA with full dataset
+
+pcoa <- ordinate(muga0, "PCoA", "bray")
+
+plot_otu <- plot_ordination(muga0, pcoa, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  labs(x = "PCoA-axis1 [46.1%]", y = "PCoA-axis2 [36.3%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=SampleID), max.overlaps = Inf)
+plot_otu
+#ggsave("PCOA_ordination.pdf", width = 6.5, height = 6)
+```
+
+```{r PCOA otu level}
+muga0_onlymuga <- subset_samples(muga0, Isolation_source=="Muga")
+# PCOA with phylum agglomeration
+pcoa <- ordinate(muga0_onlymuga, "PCoA", "bray")
+
+plot_otu_onlymuga_loc <- plot_ordination(muga0_onlymuga, pcoa, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  labs(x = "PCoA-axis1 [79.4%]", y = "PCoA-axis2 [16.5%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=Location), max.overlaps = Inf)
+plot_otu_onlymuga_loc
+#ggsave("PCOA_onlymuga_loc.pdf", width = 6.5, height = 6)
+
+plot_otu_onlymuga_dev <- plot_ordination(muga0_onlymuga, pcoa, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  labs(x = "PCoA-axis1 [79%]", y = "PCoA-axis2 [15.5%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=Devlopmental_stage), max.overlaps = Inf)
+plot_otu_onlymuga_dev
+#ggsave("PCOA_onlymuga_dev.pdf", width = 6.5, height = 6)
+```
+
+```{r PCOA genus glom and ra}
+# PCOA with genus agglomerated and then relative abundance transformed dataset
+muga0_glom_g <- tax_glom(muga0_onlymuga, taxrank="Genus", NArm = FALSE)
+#muga0_glom_g_sra <- muga0_glom_g %>% scale_reads(n = 8585)
+pcoa_glom_g <- ordinate(muga0_glom_g, "PCoA", "bray")
+
+plot_genus_onlymuga_dev <- plot_ordination(muga0_glom_g, pcoa_glom_g, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  #labs(x = "PCoA-axis1 [79%]", y = "PCoA-axis2 [15.5%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=Devlopmental_stage), max.overlaps = Inf)
+plot_genus_onlymuga_dev
+#ggsave("PCOA_onlymuga_genus_dev.pdf", width = 6.5, height = 6)
+```
+
+```{r PCOA otu level}
+muga0_onlyeri <- subset_samples(muga0, Isolation_source=="Eri")
+# PCOA with phylum agglomeration
+pcoa <- ordinate(muga0_onlyeri, "PCoA", "bray")
+
+plot_otu_onlyeri_loc <- plot_ordination(muga0_onlyeri, pcoa, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  labs(x = "PCoA-axis1 [79.4%]", y = "PCoA-axis2 [16.5%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=Location), max.overlaps = Inf)
+plot_otu_onlymuga_loc
+#ggsave("PCOA_onlymuga_loc.pdf", width = 6.5, height = 6)
+
+plot_otu_onlyeri_dev <- plot_ordination(muga0_onlyeri, pcoa, color = "Feed_plant") +
+  geom_point(size = 3.5) +
+  theme_classic(base_size = 12) +
+  #scale_color_manual(name = c("Som", "Soalu", "Dighloti", "Castor"), values=c("#34495E", "#13C52A", "#DF3D1A", "#1AA7DF")) +
+  theme(legend.position = "top") + guides(guide_legend(color = "Feed_plant"), shape = FALSE, scale = "none") +
+  labs(x = "PCoA-axis1 [86.7%]", y = "PCoA-axis2 [10.8%]", caption = "collapse-level: OTU") +
+  geom_text_repel(aes(label=Devlopmental_stage), max.overlaps = Inf)
+plot_otu_onlyeri_dev
+#ggsave("PCOA_onlyeri_dev.pdf", width = 6.5, height = 6)
+```
+
+
+```{r}
+doadonis(muga0, "Isolation_source")
+doadonis(muga0_rarefied, "Feed_plant")
+```
+```
+[1] "Adonis results:"
+
+Call:
+adonis(formula = bdist ~ col) 
+
+Permutation: free
+Number of permutations: 999
+
+Terms added sequentially (first to last)
+
+          Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+col        1    2.8933 2.89328  15.766 0.51245  0.001 ***
+Residuals 15    2.7527 0.18351         0.48755           
+Total     16    5.6460                 1.00000           
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+```
+
+```{r}
+doadonis(muga0_onlymuga, "Devlopmental_stage")
+```
+
+```{r}
+muga0.phylum <- tax_glom(muga0, taxrank = "Phylum")
+muga0.class <- tax_glom(muga0, taxrank = "Class")
+muga0.order <- tax_glom(muga0, taxrank = "Order")
+muga0.family <- tax_glom(muga0, taxrank = "Family")
+muga0.genus <- tax_glom(muga0, taxrank = "Genus")
+
+colvec1 <- rainbow(61, s =0.7)
+colvec2 <- rainbow(61, s = 0.8)
+
+muga0.phy.transformed <- transform_sample_counts(muga0.phylum, function(x) 100*x/sum(x))
+muga0.phy <- psmelt(muga0.phy.transformed)
+muga0.p1p <- ggplot(muga0.phy, aes_string(x="Sample", y="Abundance", fill="Phylum"))
+muga0.p1p <- muga0.p1p + geom_bar(stat = "identity", 
+                                position = "stack", 
+                                color ="black", 
+                                width = 0.6) + scale_fill_manual(values = colvec2)
+muga0.p1p <- muga0.p1p + theme(legend.key.size = unit(0.4, "cm"), 
+                             legend.position = "bottom", 
+                             axis.text.x = element_text(size=12, vjust=0, angle = 90, color = "black", face = "bold"),
+                             axis.text.y = element_text(size=12, vjust=0, color = "black", face = "bold"), 
+                             legend.text = element_text(size=8), 
+                             axis.title = element_text(size = 15, face = "bold")) +
+  labs(x="Sample", y="Percent abundance %") +
+  guides(fill = guide_legend(override.aes = list(colour = NULL), ncol = 3, title = NULL)) 
+                     #+ scale_x_discrete(limits=c("P.E.1", "P.B.4", "P.C.8", "N.1.4", "N.D.1", "N.4.8", "Y.5.4", "Y.9.1", "Y.3.8", "B.10.1", "B.6.8", "B.7.4"))
+muga0.p1p
+ggsave("phylum.pdf", width = 6.5, height = 6)
+```
+
+```{r}
+muga0.family.transformed <- transform_sample_counts(muga0.family, function(x) 100*x/sum(x))
+muga0.family <- psmelt(muga0.family.transformed)
+muga0.f1f <- ggplot(muga0.family, aes_string(x="Sample", y="Abundance", fill="Family"))
+muga0.f1f <- muga0.f1f + geom_bar(stat = "identity", 
+                                position = "stack", 
+                                color ="black", 
+                                width = 0.6) + scale_fill_manual(values = colvec2)
+muga0.f1f <- muga0.f1f + theme(legend.key.size = unit(0.4, "cm"), 
+                             legend.position = "bottom", 
+                             axis.text.x = element_text(size=12, vjust=0, angle = 90, color = "black", face = "bold"),
+                             axis.text.y = element_text(size=12, vjust=0, color = "black", face = "bold"), 
+                             legend.text = element_text(size=8), 
+                             axis.title = element_text(size = 15, face = "bold")) +
+  labs(x="Sample", y="Percent abundance %") +
+  guides(fill = guide_legend(override.aes = list(colour = NULL), ncol = 6, title = NULL)) 
+                     #+ scale_x_discrete(limits=c("P.E.1", "P.B.4", "P.C.8", "N.1.4", "N.D.1", "N.4.8", "Y.5.4", "Y.9.1", "Y.3.8", "B.10.1", "B.6.8", "B.7.4"))
+muga0.f1f
+ggsave("family.pdf", width = 10, height = 6)
+```
+
+```{r}
+muga0.order.transformed <- transform_sample_counts(muga0.order, function(x) 100*x/sum(x))
+muga0.order <- psmelt(muga0.order.transformed)
+muga0.o1o <- ggplot(muga0.order, aes_string(x="Sample", y="Abundance", fill="Order"))
+muga0.o1o <- muga0.o1o + geom_bar(stat = "identity", 
+                                position = "stack", 
+                                color ="black", 
+                                width = 0.6) + scale_fill_manual(values = colvec2)
+muga0.o1o <- muga0.o1o + theme(legend.key.size = unit(0.4, "cm"), 
+                             legend.position = "bottom", 
+                             axis.text.x = element_text(size=12, vjust=0, angle = 90, color = "black", face = "bold"),
+                             axis.text.y = element_text(size=12, vjust=0, color = "black", face = "bold"), 
+                             legend.text = element_text(size=8), 
+                             axis.title = element_text(size = 15, face = "bold")) +
+  labs(x="Sample", y="Percent abundance %") +
+  guides(fill = guide_legend(override.aes = list(colour = NULL), ncol = 6, title = NULL))
+                     #+ scale_x_discrete(limits=c("P.E.1", "P.B.4", "P.C.8", "N.1.4", "N.D.1", "N.4.8", "Y.5.4", "Y.9.1", "Y.3.8", "B.10.1", "B.6.8", "B.7.4"))
+muga0.o1o
+ggsave("order.pdf", width = 10, height = 6)
+```
+
+```{r}
+colvec1 <- rainbow(61, s =0.7)
+colvec2 <- rainbow(99, s = 0.8)
+muga0.genus.transformed <- transform_sample_counts(muga0.genus, function(x) 100*x/sum(x))
+muga0.genus <- psmelt(muga0.genus.transformed)
+muga0.g1g <- ggplot(muga0.genus, aes_string(x="Sample", y="Abundance", fill="Genus"))
+muga0.g1g <- muga0.g1g + geom_bar(stat = "identity", 
+                                position = "stack", 
+                                color ="black", 
+                                width = 0.6) + scale_fill_manual(values = colvec2)
+muga0.g1g <- muga0.g1g + theme(legend.key.size = unit(0.4, "cm"), 
+                             legend.position = "bottom", 
+                             axis.text.x = element_text(size=12, vjust=0, angle = 90, color = "black", face = "bold"),
+                             axis.text.y = element_text(size=12, vjust=0, color = "black", face = "bold"), 
+                             legend.text = element_text(size=8), 
+                             axis.title = element_text(size = 15, face = "bold")) +
+  labs(x="Sample", y="Percent abundance %") +
+  guides(fill = guide_legend(override.aes = list(colour = NULL), ncol = 8, title = NULL))
+                     #+ scale_x_discrete(limits=c("P.E.1", "P.B.4", "P.C.8", "N.1.4", "N.D.1", "N.4.8", "Y.5.4", "Y.9.1", "Y.3.8", "B.10.1", "B.6.8", "B.7.4"))
+muga0.g1g
+ggsave("genus.pdf", width = 14, height = 6)
+```
+
+
+
