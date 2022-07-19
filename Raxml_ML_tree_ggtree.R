@@ -52,3 +52,6 @@ raxml_rdrp <- ggtree(tree, size = 1, colour = "black", alpha = 0.6) +
   xlim(NA, 7)
 
 raxml_rdrp
+
+
+
